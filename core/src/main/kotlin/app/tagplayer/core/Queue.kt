@@ -7,6 +7,11 @@ data class PlayQueue(
     val index: Int = 0,
 ) {
     val currentId: String? get() = ids.getOrNull(index)
+
+    fun withIdReplaced(fromId: String, toId: String): PlayQueue {
+        if (fromId == toId) return this
+        return copy(ids = ids.map { if (it == fromId) toId else it })
+    }
 }
 
 sealed interface QueueStep {

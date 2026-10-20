@@ -24,8 +24,11 @@ data class SongRecord(
     val title: String = "",
     val artist: String = "",
     val album: String = "",
+    val genre: String = "",
     val durationMs: Long = 0,
     val size: Long = 0,
+    val releaseDate: String = "",
+    val recognizedNames: Boolean = false,
     val metaUpdatedAt: Long = 0,
     val tags: Map<String, Long> = emptyMap(),
     val removedTags: Map<String, Long> = emptyMap(),
@@ -76,6 +79,8 @@ data class PlaylistFilter(
     val includeMode: IncludeMode = IncludeMode.All,
     val exclude: List<String> = emptyList(),
     val query: String = "",
+    val yearFrom: Int? = null,
+    val yearTo: Int? = null,
 )
 
 fun Preset.mode(): IncludeMode = IncludeMode.parse(includeMode)

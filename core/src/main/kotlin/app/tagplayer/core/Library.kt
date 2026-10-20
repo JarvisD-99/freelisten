@@ -18,10 +18,14 @@ fun isAudioFileName(name: String): Boolean {
 
 fun shouldSkipFileName(name: String): Boolean = name.startsWith(".") || ".sync-conflict-" in name
 
+fun filenameSides(fileName: String): Pair<String, String>? {
+    val base = fileName.substringBeforeLast('.', fileName).trim()
+    return splitSides(base)
+}
+
 fun artistAndTitleFromFileName(fileName: String): Pair<String, String> {
     val base = fileName.substringBeforeLast('.', fileName).trim()
-    val split = splitArtistAndTitle(base)
-    return if (split != null) split else "" to base
+    return filenameSides(fileName) ?: ("" to base)
 }
 
 /**
@@ -54,14 +58,14 @@ fun trackFileName(track: LocalTrack): String {
     return decoded.substringAfterLast('/').substringAfterLast(':')
 }
 
-private fun splitArtistAndTitle(base: String): Pair<String, String>? {
+private fun splitSides(base: String): Pair<String, String>? {
     val separators = listOf(" - ", " – ", " — ", "－")
     for (separator in separators) {
         val index = base.indexOf(separator)
         if (index <= 0 || index + separator.length >= base.length) continue
-        val artist = base.substring(0, index).trim()
-        val title = base.substring(index + separator.length).trim()
-        if (artist.isNotEmpty() && title.isNotEmpty()) return artist to title
+        val left = base.substring(0, index).trim()
+        val right = base.substring(index + separator.length).trim()
+        if (left.isNotEmpty() && right.isNotEmpty()) return left to right
     }
     return null
 }
@@ -100,11 +104,21 @@ fun dedupeTracks(tracks: List<LocalTrack>): List<LocalTrack> {
     return map.values.toList()
 }
 
-fun listAudioFiles(root: File): List<File> {
+fun listAudioFiles(
+    root: File,
+    skipDirectories: Set<String> = emptySet(),
+    skipFolderPaths: Set<String> = emptySet(),
+    skipExactFolders: Set<String> = emptySet(),
+): List<File> {
     if (!root.isDirectory) return emptyList()
+    val skipped = skipDirectories.map { it.lowercase() }.toSet()
+    val skipTrees = skipFolderPaths.map(::normalizePath).toSet()
+    val exactFolders = skipExactFolders.map(::normalizePath).toSet()
     val found = ArrayList<File>()
     val seen = HashSet<String>()
     fun walk(directory: File) {
+        val dirPath = normalizePath(directory.path)
+        if (skipTrees.any { dirPath == it || dirPath.startsWith("$it/") }) return
         val key = try {
             directory.canonicalPath
         } catch (_: IOException) {
@@ -115,8 +129,9 @@ fun listAudioFiles(root: File): List<File> {
         for (child in children) {
             if (shouldSkipFileName(child.name)) continue
             when {
+                child.isDirectory && child.name.lowercase() in skipped -> Unit
                 child.isDirectory -> walk(child)
-                child.isFile && isAudioFileName(child.name) && child.length() > 0L -> found += child
+                child.isFile && isAudioFileName(child.name) && child.length() > 0L && dirPath !in exactFolders -> found += child
             }
         }
     }
@@ -138,9 +153,12 @@ fun scanAudioFolder(
     root: File,
     cache: Map<String, LocalTrack>,
     metadataOf: (File) -> TrackMetadata,
+    skipDirectories: Set<String> = emptySet(),
+    skipFolderPaths: Set<String> = emptySet(),
+    skipExactFolders: Set<String> = emptySet(),
     onProgress: (done: Int, total: Int, name: String) -> Unit = { _, _, _ -> },
 ): List<LocalTrack> {
-    val files = listAudioFiles(root)
+    val files = listAudioFiles(root, skipDirectories, skipFolderPaths, skipExactFolders)
     val tracks = ArrayList<LocalTrack>(files.size)
     files.forEachIndexed { index, file ->
         if (index % 20 == 0 || index == files.lastIndex) onProgress(index + 1, files.size, file.name)

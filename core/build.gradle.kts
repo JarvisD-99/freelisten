@@ -11,5 +11,6 @@ kotlin {
 
 dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
+    implementation("net.jthink:jaudiotagger:3.0.1")
     testImplementation(kotlin("test"))
 }

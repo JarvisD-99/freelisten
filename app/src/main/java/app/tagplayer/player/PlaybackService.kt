@@ -25,8 +25,8 @@ import app.tagplayer.R
 import app.tagplayer.TagPlayerApplication
 import app.tagplayer.core.LocalTrack
 import app.tagplayer.core.PlayQueue
-import app.tagplayer.core.resolveTrackNames
-import app.tagplayer.core.trackFileName
+import app.tagplayer.core.displayArtist
+import app.tagplayer.core.displayTitle
 import app.tagplayer.core.QueueStep
 import app.tagplayer.core.nextTrack
 import app.tagplayer.core.previousTrack
@@ -98,6 +98,14 @@ class PlaybackService : Service() {
             ACTION_PREV -> userPrevious()
             ACTION_SEEK -> seek(intent.getLongExtra(EXTRA_POS, 0L))
             ACTION_PAUSE -> pause()
+            ACTION_RENAME_ID -> {
+                val from = intent.getStringExtra(EXTRA_FROM).orEmpty()
+                val to = intent.getStringExtra(EXTRA_TO).orEmpty()
+                if (from.isNotBlank() && to.isNotBlank() && from != to) {
+                    queue = queue.withIdReplaced(from, to)
+                }
+                refreshLabels()
+            }
         }
         return START_STICKY
     }
@@ -232,9 +240,9 @@ class PlaybackService : Service() {
             requestFocus()
             player.play()
             hasMedia = true
-            val (resolvedTitle, resolvedArtist) = resolveTrackNames(track.title, track.artist, trackFileName(track))
-            title = resolvedTitle
-            artist = resolvedArtist
+            val record = library.tagFile.songs[track.contentId]
+            title = displayTitle(track, record)
+            artist = displayArtist(track, record)
             positionMs = 0
             publish()
             updateNotification()
@@ -335,6 +343,16 @@ class PlaybackService : Service() {
         }
     }
 
+    private fun refreshLabels() {
+        val id = queue.currentId ?: return
+        val track = library.find(id) ?: return
+        val record = library.tagFile.songs[track.contentId]
+        title = displayTitle(track, record)
+        artist = displayArtist(track, record)
+        publish()
+        updateNotification()
+    }
+
     private fun updateNotification() {
         val manager = getSystemService(NotificationManager::class.java)
         manager.notify(NOTIFICATION_ID, buildNotification())
@@ -388,8 +406,11 @@ class PlaybackService : Service() {
         const val ACTION_PREV = "app.tagplayer.PREV"
         const val ACTION_SEEK = "app.tagplayer.SEEK"
         const val ACTION_PAUSE = "app.tagplayer.PAUSE"
+        const val ACTION_RENAME_ID = "app.tagplayer.RENAME_ID"
         const val EXTRA_IDS = "ids"
         const val EXTRA_POS = "pos"
+        const val EXTRA_FROM = "from"
+        const val EXTRA_TO = "to"
         private const val CHANNEL = "playback"
         private const val NOTIFICATION_ID = 1
     }

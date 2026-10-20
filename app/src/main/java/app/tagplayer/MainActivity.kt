@@ -35,6 +35,10 @@ class MainActivity : ComponentActivity() {
 
     private val notifications = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
+    private val pickCover = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) viewModel.stageCoverFromUri(uri)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
@@ -44,6 +48,7 @@ class MainActivity : ComponentActivity() {
                     onPickFolder = ::launchFolderPicker,
                     onPreparePlayback = ::ensureNotificationPermission,
                     onAllFilesAccess = ::openAllFilesAccess,
+                    onPickCover = { pickCover.launch("image/*") },
                 )
             }
         }

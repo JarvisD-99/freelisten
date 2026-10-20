@@ -55,18 +55,27 @@ fun SongRecord.withMetadata(
     durationMs: Long,
     size: Long,
     now: Long,
+    lockNames: Boolean = false,
+    clearNames: Boolean = false,
 ): SongRecord {
-    val newTitle = title.ifBlank { this.title }
-    val newArtist = artist.ifBlank { this.artist }
+    val keepNames = recognizedNames && !lockNames && !clearNames
+    val newTitle = if (keepNames) this.title else title.ifBlank { this.title }
+    val newArtist = if (keepNames) this.artist else artist.ifBlank { this.artist }
     val newAlbum = album.ifBlank { this.album }
     val newDuration = if (durationMs > 0) durationMs else this.durationMs
     val newSize = if (size > 0) size else this.size
+    val confirmed = when {
+        clearNames -> false
+        lockNames && newTitle.isNotBlank() && newArtist.isNotBlank() -> true
+        else -> recognizedNames
+    }
     if (
         newTitle == this.title &&
         newArtist == this.artist &&
         newAlbum == this.album &&
         newDuration == this.durationMs &&
-        newSize == this.size
+        newSize == this.size &&
+        confirmed == this.recognizedNames
     ) {
         return this
     }
@@ -76,6 +85,7 @@ fun SongRecord.withMetadata(
         album = newAlbum,
         durationMs = newDuration,
         size = newSize,
+        recognizedNames = confirmed,
         metaUpdatedAt = now,
     )
 }
@@ -109,11 +119,28 @@ fun TagFile.upsertPreset(name: String, filter: PlaylistFilter, now: Long): TagFi
 
 fun TagFile.withoutPreset(id: String): TagFile = copy(presets = presets.filterNot { it.id == id })
 
+fun TagFile.moveSong(fromId: String, toId: String): TagFile {
+    if (fromId == toId) return this
+    val source = songs[fromId] ?: return this
+    val merged = songs[toId]?.let { mergeSong(it, source) } ?: source
+    return copy(songs = (songs - fromId) + (toId to merged))
+}
+
 fun mergeSong(left: SongRecord, right: SongRecord): SongRecord {
     val tags = mergeTimes(left.tags, right.tags)
     val removed = mergeTimes(left.removedTags, right.removedTags)
     val meta = if (right.metaUpdatedAt >= left.metaUpdatedAt) right else left
-    return meta.copy(tags = tags, removedTags = removed)
+    val named = when {
+        left.recognizedNames && !right.recognizedNames -> left
+        right.recognizedNames && !left.recognizedNames -> right
+        else -> null
+    }
+    val merged = meta.copy(tags = tags, removedTags = removed)
+    return if (named == null) {
+        merged
+    } else {
+        merged.copy(title = named.title, artist = named.artist, recognizedNames = true)
+    }
 }
 
 fun mergeTagFiles(left: TagFile, right: TagFile): TagFile {
